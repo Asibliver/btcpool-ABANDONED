@@ -27,6 +27,7 @@
 
 #include <libconfig.h++>
 
+
 ///////////////////////////////// ClientContainer //////////////////////////////
 ClientContainerBitcoinProxy::ClientContainerBitcoinProxy(
     const libconfig::Config &config)
@@ -274,7 +275,7 @@ void ClientContainerBitcoinProxy::consumeSolvedShare(
     return;
   }
 
-  client->submitShare(submitJson);
+  client->submitShare(submitJson, workerFullName);
 
   if (shareLogWriter) {
     ShareBitcoin share;
@@ -396,7 +397,7 @@ void PoolWatchClientBitcoinProxy::onConnected() {
   sendData(s);
 }
 
-void PoolWatchClientBitcoinProxy::submitShare(string submitJson) {
+void PoolWatchClientBitcoinProxy::submitShare(string submitJson, string workerFullName) {
   {
     std::lock_guard<std::mutex> lock(wantSubmittedSharesLock_);
     if (state_ != AUTHENTICATED) {
@@ -406,7 +407,20 @@ void PoolWatchClientBitcoinProxy::submitShare(string submitJson) {
       return;
     }
   }
+  
+  if (this->authorizedWorkerFullNameSet.find(workerFullName) == this->authorizedWorkerFullNameSet.end()) {
+    LOG(WARNING) << "Share from unauthorized worker: " << workerFullName << ", reauthorize.";
+    string s = Strings::Format(
+        "{\"id\": 1, \"method\": \"mining.authorize\","
+        "\"params\": [\"%s\", \"%s\"]}\n",
+        workerFullName,
+        "x");
 
+    sendData(s);
+
+    this->authorizedWorkerFullNameSet.emplace(workerFullName);
+  }
+  
   sendData(submitJson);
   LOG(INFO) << "<" << poolName_ << "> submit solution: " << submitJson;
 }
@@ -423,7 +437,6 @@ void PoolWatchClientBitcoinProxy::handleStratumMessage(const string &line) {
     return;
   };
   JsonNode jresult = jnode["result"];
-  JsonNode jerror = jnode["error"];
   JsonNode jmethod = jnode["method"];
 
   if (jmethod.type() == Utilities::JS::type::Str &&
@@ -466,12 +479,12 @@ void PoolWatchClientBitcoinProxy::handleStratumMessage(const string &line) {
     // {"id":1,"result":[[["mining.set_difficulty","01000002"],
     //                    ["mining.notify","01000002"]],"01000002",8],"error":null}
     //
-    if (jerror.type() != Utilities::JS::type::Null) {
-      LOG(ERROR) << "<" << poolName_
-                 << "> json result is null, err: " << jerror.str()
-                 << ", response: " << line;
-      return;
-    }
+    // if (jerror.type() != Utilities::JS::type::Null) {
+    //   LOG(ERROR) << "<" << poolName_
+    //              << "> json result is null, err: " << jerror.str()
+    //              << ", response: " << line;
+    //   return;
+    // }
     std::vector<JsonNode> resArr = jresult.array();
     if (resArr.size() < 3) {
       LOG(ERROR) << "<" << poolName_

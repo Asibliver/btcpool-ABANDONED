@@ -32,6 +32,7 @@
 #include <queue>
 #include <atomic>
 #include <memory>
+#include <unordered_set>
 
 class PoolWatchClientBitcoinProxy;
 
@@ -72,7 +73,7 @@ protected:
   void runThreadSolvedShareConsume();
   void consumeSolvedShare(rd_kafka_message_t *rkmessage);
   void tryFlushSolvedShares();
-
+  
 public:
   ClientContainerBitcoinProxy(const libconfig::Config &config);
   ~ClientContainerBitcoinProxy();
@@ -97,6 +98,7 @@ protected:
 
   void handleStratumMessage(const string &line) override;
 
+  std::unordered_set<std::string> authorizedWorkerFullNameSet;
 public:
   PoolWatchClientBitcoinProxy(
       struct event_base *base,
@@ -105,7 +107,7 @@ public:
   ~PoolWatchClientBitcoinProxy();
 
   void onConnected() override;
-  void submitShare(string submitJson);
+  void submitShare(string submitJson, string workerFullName);
 
   ClientContainerBitcoinProxy *GetContainerBitcoinProxy() {
     return static_cast<ClientContainerBitcoinProxy *>(container_);
